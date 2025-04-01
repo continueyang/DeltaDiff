@@ -1,0 +1,139 @@
+trainer:
+  target: trainer.TrainerDifIRLPIPS
+
+
+
+model:
+  target: models.unet.UNetModelSwin
+  ckpt_path: ~
+  params:
+    image_size: 48
+    in_channels: 3
+    model_channels: 64
+    out_channels: 3
+    attention_resolutions: [32,16,8]
+    dropout: 0
+    channel_mult: [1, 2,]
+    num_res_blocks: [1, 1]
+    conv_resample: True
+    dims: 2
+    use_fp16: False
+    num_head_channels: 16
+    use_scale_shift_norm: True
+    resblock_updown: False
+    swin_depth: 1
+    swin_embed_dim: 96
+    window_size: 8
+    mlp_ratio: 4
+    cond_lq: True
+    lq_size: 48
+network_g:
+  num_in_ch: 3
+  num_out_ch: 3
+  num_feat: 64
+  num_group: 10
+  num_block: 20
+  squeeze_factor: 16
+  upscale: 4
+  res_scale: 1
+  img_range: 255.
+  rgb_mean: [0.4488, 0.4371, 0.4040]
+network_gtar:
+  target: basicsr.archs.rcan_arch.RCAN
+diffusion:
+  target: models.script_util.create_RESDIF #nonoisediffusion #_gaussian_diffusion
+  params:
+    sf: 4
+    schedule_name: exponential
+    schedule_kwargs:
+      power: 0.3
+    etas_end: 0.99
+    steps: 4
+    min_noise_level: 0.01
+    kappa: 2.0
+    weighted_mse: False
+    predict_type: xstart
+    timestep_respacing: ~
+    scale_factor: 1.0
+    normalize_input: True
+    latent_flag: True
+
+data:
+  train:
+    type: bicubic_train
+    params:
+      source_path: "/ai/dif/ResShift-journal/ResShift-journal/traindata/DIV2K/"
+      degrade_kwargs:
+        scale: 0.25
+        activate_matlab: True
+        resize_back: True
+        pch_size: 196
+        pass_smallmaxresize: False
+        pass_aug: False
+        pass_crop: True
+      transform_type: default
+      transform_kwargs:
+        mean: 0.5
+        std: 0.5
+      length: ~
+      need_path: False
+      im_exts: png
+      recursive: False
+  val:
+    type: bicubic_val
+    params:
+      source_path: "/ai/dif/BasicSR-gnn/datasets/testsets/Set5/HR/"
+      degrade_kwargs:
+        scale: 0.25
+        out_scale: 1
+        activate_matlab: True
+        resize_back: True
+        pass_smallmaxresize: False
+        pass_aug: False
+        pass_crop: True
+      transform_type: default
+      transform_kwargs:
+        mean: 0.5
+        std: 0.5
+      length: 5
+      need_path: False
+      im_exts: png
+      recursive: False
+
+train:
+  # learning rate
+  lr: 5e-5                      # learning rate
+  lr_min: 2e-5                      # learning rate
+  lr_schedule: cosin
+  warmup_iterations: 1000
+  # dataloader
+  batch: [128, 8]
+  microbatch: 16
+  num_workers: 35
+  prefetch_factor: 2
+  # optimization settings
+  weight_decay: 0
+  ema_rate: 0.999
+  iterations: 100000            # total iterations
+  # save logging
+  save_freq: 2000
+  ori_mse: True
+  log_freq: [100,2000, 1]         # [training loss, training images, val images]
+  loss_coef: [1.0, 1.0]         # [mse, lpips]
+  local_logging: True           # manually save images
+  tf_logging: False             # tensorboard logging
+  # validation settings
+  use_ema_val: True
+  val_freq: ${train.save_freq}
+  val_y_channel: True
+  val_resolution: ${model.params.lq_size}
+  val_padding_mode: reflect
+  val_maintain: 1
+  # training setting
+  use_amp: True                # amp training
+  seed: 123456                 # random seed
+  global_seeding: False
+  # model compile
+  compile:
+    flag: True
+    mode: reduce-overhead
